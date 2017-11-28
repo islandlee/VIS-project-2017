@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>The global terrorism attacks from 1997-2016</title>
+<style>
+.country:hover{
+  stroke: #fff;
+  stroke-width: 1.5px;
+}
+.text{
+  font-size:10px;
+  text-transform:capitalize;
+}
+#container {
+  margin:0px 0%;
+  border:0px solid #000;
+  border-radius: 0px;
+  height:90%;
+  overflow:hidden;
+  background: #F0F8FF;
+}
+.hidden { 
+  display: none; 
+}
+div.tooltip {
+  color: #222; 
+  background: #fff; 
+  padding: .5em; 
+  text-shadow: #f5f5f5 0 1px 0;
+  border-radius: 2px; 
+  box-shadow: 0px 0px 2px 0px #a6a6a6; 
+  opacity: 0.9; 
+  position: absolute;
+}
+.graticule {
+  fill: none;
+  stroke: #bbb;
+  stroke-width: .5px;
+  stroke-opacity: .5;
+}
+.equator {
+  stroke: #ccc;
+  stroke-width: 1px;
+}
+
+  .axis path,
+  .axis line{
+    fill: none;
+    stroke: black;
+    shape-rendering: crispEdges;
+  }
+
+  .axis text {
+    font-family: sans-serif;
+    font-size: 11px;
+  }
+
+  .MyRect {
+    fill: steelblue;
+  }
+
+  .MyText {
+    fill: white;
+    text-anchor: middle;
+  }
+</style>
+</head>
+<body>
+
+<!--   <h1>World Map Template with D3.js</h1>
+  <p>Responsive D3 World Map with zoom and pan limits, graticule and equator lines, optimized TopoJSON with country names and colors, geo translation functions, geo coordinate plotting functions for points and text, and much more.  For a full list of features, please go <a href="http://techslides.com/d3-map-starter-kit/">back to article</a>.</p> -->
+
+  <div id="container">
+    <div id="charts" style="position:fixed;float:left;top:200px;left:400px;opacity: 0.75; background: #81C7D4;"></div>
+     <form style="background:#81C7D4;position:absolute;float:left;top:660px;left:1000px;font-size: 22px">
+      <a style="opacity: 0.4;" id="result">year</a> 
+      <input id="bar" type="range" name="points" min="1997" max="2016" onmouseup="update()"/>
+    </form> 
+    <div style="position:fixed;float:left;top:660px;left:400px;opacity:0.8;font-size:28px;opacity:0.7; font:Trebuchet MS;"><a target="_blank" style="color:#005CAF;background:#81C7D4;"> The global terrorism attacks from 1997-2016</a></div>
+  </div>
+
+
+<script src="js/d3.min.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/topojson.v1.min.js"></script>
+<script>
+
+d3.select(window).on("resize", throttle);
+
+var zoom = d3.behavior.zoom()
+    .scaleExtent([0.5, 9])
+    .on("zoom", move);
+
+
+var width = document.getElementById('container').offsetWidth;
+var height = width / 2;
+
+var topo,projection,path,svg,g,year;
+var attacks, count; // data about terrorism attacks
+var chart; 
+year = 2001;
+
+var wrapper=document.getElementById('result');
+var slider=document.getElementById('bar');
+slider.value = year;
+
+function update() { // change years and redraw
+  wrapper.innerHTML = slider.value;
+  year = slider.value;
+  redraw();
+}
+
+var graticule = d3.geo.graticule();
+
+//show messages when mouse move over country and attacks 
+var tooltip = d3.select("#container").append("div").attr("class", "tooltip hidden"); 
+
+setup(width,height);
+// set up the container width and height
+function setup(width,height){
+  projection = d3.geo.mercator()
+    .translate([(width/2), (height/2)])
+    .scale( width / 2 / Math.PI);
+
+  path = d3.geo.path().projection(projection);
+
+  svg = d3.select("#container").append("svg")
+      .attr("width", width)
+      .attr("height", height)
+      .call(zoom)
+      .on("click", click)
+      .append("g");
+
+  g = svg.append("g");
+
+}
+// read data about every year each country's amount of attacks
+d3.json("data/attack_count.json", function(error, attacks_count) {
+  if (error) {
+    console.log(error);
+  }
+  count = attacks_count;
+});
+// read data about all attacks from 1997 - 2016
+d3.json("data/attack_data.json", function(error, all_attacks) {
+  attacks = all_attacks.filter(function(item) {
+     return item.nkill > 0;
+  });
+  draw(topo,year,count,attacks);
+});
+// data about map
+d3.json("data/world-topo-min.json", function(error, world) {
+  var countries = topojson.feature(world, world.objects.countries).features;
+  topo = countries;
+});
+//draw each country with different colors according to attack_count.json, each attack with point according to attack_data.json
+function draw(topo,year,count,attacks) {
+  var palegreen = d3.rgb(229,187,129);    //pale
+  var darkgreen = d3.rgb(161,23,21);        //dark
+
+  var color = d3.interpolate(palegreen,darkgreen);  // the scale to change integer into different colors
+  var linear = d3.scale.linear()
+          .domain([0, 50])
+          .range([0, 1]);
+
+  svg.append("path")
+     .datum(graticule)
+     .attr("class", "graticule")
+     .attr("d", path);
+
+// add equator
+  g.append("path") 
+   .datum({type: "LineString", coordinates: [[-180, 0], [-90, 0], [0, 0], [90, 0], [180, 0]]})
+   .attr("class", "equator")
+   .attr("d", path);
+
+
+  var country = g.selectAll(".country").data(topo);
+//draw countries in the map, fill colors with count(the data from attack_count.json)
+  country.enter().insert("path")
+      .attr("class", "country")
+      .attr("d", path)
+      .attr("id", function(d,i) { return d.id; })
+      .attr("title", function(d,i) { return d.properties.name; })
+      .style("fill", function(d, i) { 
+        var c = count[year][d.properties.name];
+        if (typeof(c) == typeof(2)) { // not null
+          if(c > 50) {
+            return color(linear(50));
+          }
+          else {
+            return color(linear(c));
+          }
+        }
+        else {
+          return color(linear(0));
+        } });
+
+  //offsets for tooltips
+  var offsetL = document.getElementById('container').offsetLeft+20;
+  var offsetT = document.getElementById('container').offsetTop+10;
+
+  //tooltips show country name
+  country
+    .on("mousemove", function(d,i) {
+
+      var mouse = d3.mouse(svg.node()).map( function(d) { return parseInt(d); } );
+      tooltip.classed("hidden", false)
+             .attr("style", "left:"+(mouse[0]+offsetL)+"px;top:"+(mouse[1]+offsetT)+"px")
+             .html(d.properties.name);
+    })
+    .on("mouseout",  function(d,i) {
+      tooltip.classed("hidden", true);
+    })
+    .on("click", function(d,i) {
+        if (chart != null) {
+          d3.select('svg').remove();
+          chart = null;
+        }
+
+      //定义一个数组
+      var dataset = [10, 20, 30, 40, 33, 24, 12, 5, 38, 39, 29, 49,29, 53, 4, 2, 4 ,0,0, 0];
+      for (var i = 1997; i < 2017; i++)
+        dataset[i-1997] = count[i][d.properties.name];
+      chart = drawChart(dataset);
+      chart.classed("hidden", false);
+      event.stopPropagation();
+      console.log("clicked");
+    })
+
+ // draw points about attacks in this year
+    curAttacks = attacks.filter(function(item) {
+       return item.year == year;
+    });
+    curAttacks.forEach(function(i){
+      if (i.nkill > 0)
+          addpoint(i);
+    });
+}
+
+
+function redraw() {
+  width = document.getElementById('container').offsetWidth;
+  height = width / 2;
+  if (chart != null) {
+    d3.select('svg').remove();
+    chart = null;
+  }
+  d3.select('svg').remove();
+  setup(width,height);
+  draw(topo,year,count,attacks);
+}
+
+// about the move of map, not very familiar
+function move() {
+
+  var t = d3.event.translate;
+  var s = d3.event.scale; 
+  zscale = s;
+  var h = height/4;
+
+
+  t[0] = Math.min(
+    (width/height)  * (s - 1), 
+    Math.max( width * (1 - s), t[0] )
+  );
+
+  t[1] = Math.min(
+    h * (s - 1) + h * s, 
+    Math.max(height  * (1 - s) - h * s, t[1])
+  );
+
+  zoom.translate(t);
+  g.attr("transform", "translate(" + t + ")scale(" + s + ")");
+
+  //adjust the country hover stroke width based on zoom level
+  d3.selectAll(".country").style("stroke-width", 2.5 / s);
+
+}
+
+
+// zoom? not familiar too
+var throttleTimer;
+function throttle() {
+  window.clearTimeout(throttleTimer);
+    throttleTimer = window.setTimeout(function() {
+      redraw();
+    }, 200);
+}
+
+//the click functions when clicking each country, more to do
+function click() {
+  if (chart != null)
+    chart.classed("hidden", true);
+}
+
+
+//function to add points about each attack, different radius for different amount of people killed. data from data_attack.json
+function addpoint(attack) {
+  var lon = attack.longitude;
+  var lat = attack.latitude;
+  var nkill = attack.nkill;
+  var gpoint = g.append("g").attr("class", "gpoint");
+  var x = projection([lon,lat])[0];
+  var y = projection([lon,lat])[1];
+  var radius = nkill/10 + 1;
+  var date = new Date(attack.year, attack.month-1, attack.day);
+
+  if (radius > 25)
+    radius = 25;
+  gpoint.append("svg:circle")
+        .attr("cx", x)
+        .attr("cy", y)
+        .attr("class","point")
+        .attr("r", radius)
+        .style("fill",d3.rgb(10,60,30))
+        .on("mousemove", function(d,i) {
+           var mouse = d3.mouse(svg.node()).map( function(d) { return parseInt(d); } );
+           tooltip.classed("hidden", false)
+             .attr("style", "left:"+(mouse[0]+20)+"px;top:"+(mouse[1]+20)+"px")
+             .html("Time: "+date.toDateString()+"<br/> Attack Type: "+attack.attacktype+"<br/> City: "+attack.city+"<br/> People Killed: "+attack.nkill);
+
+        })
+        .on("mouseout",  function(d,i) {
+          tooltip.classed("hidden", true);
+        });
+
+}
+</script>
+
+</body>
+</html>
